@@ -6,10 +6,11 @@ put melons in a shopping cart.
 Authors: Joel Burton, Christian Fernandez, Meggie Mahnken, Katie Byers.
 """
 
-from flask import Flask, render_template, redirect, flash
+from flask import Flask, render_template, redirect, flash, session, request
 import jinja2
 
 import melons
+import customers
 
 app = Flask(__name__)
 
@@ -37,7 +38,6 @@ def index():
 @app.route("/melons")
 def list_melons():
     """Return page showing all the melons ubermelon has to offer"""
-
     melon_list = melons.get_all()
     return render_template("all_melons.html",
                            melon_list=melon_list)
@@ -49,8 +49,7 @@ def show_melon(melon_id):
 
     Show all info about a melon. Also, provide a button to buy that melon.
     """
-
-    melon = melons.get_by_id("meli")
+    melon = melons.get_by_id(melon_id)
     print(melon)
     return render_template("melon_details.html",
                            display_melon=melon)
@@ -78,7 +77,16 @@ def show_shopping_cart():
     # Make sure your function can also handle the case wherein no cart has
     # been added to the session
 
-    return render_template("cart.html")
+    cart = []
+    total = 0
+    for melon_id, qty in session['cart'].items():
+        melon = melons.get_by_id(melon_id)
+        melon.quantity = qty
+        melon.total_price = qty * melon.price
+        cart.append(melon)
+        total += melon.total_price
+
+    return render_template("cart.html", cart=cart, total=total)
 
 
 @app.route("/add_to_cart/<melon_id>")
@@ -100,7 +108,18 @@ def add_to_cart(melon_id):
     # - flash a success message
     # - redirect the user to the cart page
 
-    return "Oops! This needs to be implemented!"
+    if session.get('cart') is None:
+        session['cart'] = {}
+
+    if session['cart'].get(melon_id) is None:
+        session['cart'][melon_id] = 1
+    else:
+        session['cart'][melon_id] += 1
+    
+    print(session['cart'])
+    flash('Success: Added to cart!')
+
+    return redirect("/cart")
 
 
 @app.route("/login", methods=["GET"])
@@ -131,9 +150,29 @@ def process_login():
     #   message and redirect the user to the "/melons" route
     # - if they don't, flash a failure message and redirect back to "/login"
     # - do the same if a Customer with that email doesn't exist
+    
+    email = request.form.get('email')
+    password = request.form.get('password')
 
-    return "Oops! This needs to be implemented"
+    try:
+        customer = customers.get_by_email(email)
+    except:
+        flash("Email not found.")
+        return redirect("/login")
 
+    if password == customer.password:
+        session['logged_in_customer_email'] = email
+        flash('Login Successfull.')
+        return redirect("/melons")
+    else:
+        flash("Incorrect Password.")
+        return redirect("/login")
+
+@app.route("/logout")
+def process_logout():
+    session.pop('logged_in_customer_email', None)
+    flash('Logged Out')
+    return redirect("/melons")
 
 @app.route("/checkout")
 def checkout():
